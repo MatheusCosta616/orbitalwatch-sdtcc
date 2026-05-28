@@ -1,0 +1,3 @@
+Runtimename="python"
+RuntimeVersion="3.11"
+BuildCommands=["pip install -r requirements.txt"]

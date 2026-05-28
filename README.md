@@ -133,3 +133,5 @@ uvicorn main:app --reload --port 8000
 | GET | `/api/fires` | Focos de calor ativos no Brasil (NASA FIRMS) |
 | GET | `/api/stats` | Estatísticas gerais da plataforma |
 | GET | `/docs` | Documentação Swagger da API |
+
+<!--deploy1-->

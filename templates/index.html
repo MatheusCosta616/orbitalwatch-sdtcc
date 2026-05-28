@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OrbitalWatch · Monitoramento Ambiental Satelital</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #03080f;
+      --surface: #080f1a;
+      --border: #0d1f35;
+      --accent: #00e5ff;
+      --accent2: #ff4d00;
+      --accent3: #39ff14;
+      --text: #c8dff0;
+      --muted: #4a6a85;
+      --font-head: 'Syne', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Starfield background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(1px 1px at 20% 30%, rgba(0,229,255,0.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 80% 10%, rgba(255,255,255,0.3) 0%, transparent 100%),
+        radial-gradient(1px 1px at 50% 80%, rgba(0,229,255,0.2) 0%, transparent 100%),
+        radial-gradient(1px 1px at 10% 70%, rgba(255,255,255,0.2) 0%, transparent 100%),
+        radial-gradient(1px 1px at 90% 60%, rgba(0,229,255,0.3) 0%, transparent 100%),
+        radial-gradient(2px 2px at 35% 50%, rgba(255,255,255,0.15) 0%, transparent 100%),
+        radial-gradient(1px 1px at 65% 25%, rgba(255,255,255,0.25) 0%, transparent 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      position: relative;
+      z-index: 10;
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      background: rgba(3,8,15,0.9);
+      backdrop-filter: blur(10px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      border: 1.5px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: spin 20s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .logo-icon::before {
+      content: '🛰️';
+      font-size: 16px;
+      animation: spin 20s linear infinite reverse;
+    }
+
+    .logo-text {
+      font-family: var(--font-head);
+      font-weight: 800;
+      font-size: 1.2rem;
+      letter-spacing: 0.05em;
+      color: #fff;
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.7rem;
+      color: var(--accent3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--accent3);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent3); }
+      50% { opacity: 0.4; box-shadow: none; }
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .nav-links a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--accent); }
+
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .hero {
+      margin-bottom: 2rem;
+    }
+
+    .hero-tag {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero-tag::before {
+      content: '';
+      display: inline-block;
+      width: 24px;
+      height: 1px;
+      background: var(--accent);
+    }
+
+    h1 {
+      font-family: var(--font-head);
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 800;
+      line-height: 1.1;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 span { color: var(--accent); }
+
+    .hero-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      max-width: 600px;
+      line-height: 1.6;
+    }
+
+    /* Stats row */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      padding: 1.25rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--accent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .stat-card:hover::before { opacity: 1; }
+
+    .stat-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-family: var(--font-head);
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1;
+    }
+
+    .stat-value.fire { color: var(--accent2); }
+    .stat-value.green { color: var(--accent3); }
+    .stat-value.cyan { color: var(--accent); }
+
+    .stat-unit {
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+
+    /* Main grid */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 1.5rem;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .panel-header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-title {
+      font-family: var(--font-head);
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #fff;
+    }
+
+    .panel-badge {
+      font-size: 0.6rem;
+      padding: 3px 8px;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    #map {
+      height: 420px;
+      width: 100%;
+      filter: saturate(0.3) brightness(0.8);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .alert-list {
+      padding: 0;
+    }
+
+    .alert-item {
+      padding: 0.9rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      transition: background 0.2s;
+      cursor: default;
+    }
+
+    .alert-item:hover { background: rgba(0,229,255,0.04); }
+    .alert-item:last-child { border-bottom: none; }
+
+    .alert-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .alert-dot.high { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+    .alert-dot.medium { background: #ffb800; }
+    .alert-dot.low { background: var(--accent3); }
+
+    .alert-info { flex: 1; }
+
+    .alert-title {
+      font-size: 0.72rem;
+      color: #fff;
+      margin-bottom: 2px;
+      font-weight: 500;
+    }
+
+    .alert-meta {
+      font-size: 0.62rem;
+      color: var(--muted);
+    }
+
+    .ods-card {
+      padding: 1.25rem 1.5rem;
+    }
+
+    .ods-number {
+      font-family: var(--font-head);
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 0.25rem;
+    }
+
+    .ods-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+
+    .ods-desc {
+      font-size: 0.68rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .api-info {
+      padding: 1rem 1.5rem;
+      font-size: 0.65rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .api-info span { color: var(--accent); }
+
+    .refresh-btn {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 6px 14px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .refresh-btn:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100px;
+      color: var(--muted);
+      font-size: 0.75rem;
+      gap: 8px;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: rotate 0.8s linear infinite;
+    }
+
+    @keyframes rotate {
+      to { transform: rotate(360deg); }
+    }
+
+    footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      padding: 1rem 2rem;
+      font-size: 0.62rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2rem;
+    }
+
+    @media (max-width: 900px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .content-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"></div>
+    <div class="logo-text">Orbital<span>Watch</span></div>
+  </div>
+  <nav class="nav-links">
+    <a href="#">Dashboard</a>
+    <a href="/docs">API</a>
+    <a href="/health">Status</a>
+  </nav>
+  <div class="status-badge">
+    <div class="status-dot"></div>
+    Sistema Operacional
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="hero-tag">Indústria Espacial · Global Solution 2026</div>
+    <h1>Monitoramento Ambiental<br/><span>Via Satélite</span></h1>
+    <p class="hero-sub">Dados em tempo real de focos de calor e alertas ambientais no Brasil, utilizando o satélite VIIRS da NASA para detecção orbital de queimadas e desmatamento.</p>
+  </div>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Satélites monitorados</div>
+      <div class="stat-value cyan" id="stat-sats">—</div>
+      <div class="stat-unit">em órbita ativa</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Focos ativos (24h)</div>
+      <div class="stat-value fire" id="stat-fires">—</div>
+      <div class="stat-unit">Brasil · VIIRS SNPP</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Área monitorada</div>
+      <div class="stat-value green" id="stat-area">—</div>
+      <div class="stat-unit">km² — território nacional</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Leituras hoje</div>
+      <div class="stat-value" id="stat-readings">—</div>
+      <div class="stat-unit">pontos de dados processados</div>
+    </div>
+  </div>
+
+  <div class="content-grid">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Mapa de Focos de Calor · Brasil</span>
+        <button class="refresh-btn" onclick="loadFires()">↻ Atualizar</button>
+      </div>
+      <div id="map"></div>
+      <div class="api-info">
+        <span>Fonte:</span> NASA FIRMS VIIRS SNPP &nbsp;|&nbsp;
+        <span>Satélite:</span> Suomi NPP &nbsp;|&nbsp;
+        <span>Resolução:</span> 375m &nbsp;|&nbsp;
+        <span>Atualização:</span> <span id="last-update">—</span>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Alertas Ativos</span>
+          <span class="panel-badge" id="alert-count">—</span>
+        </div>
+        <div class="alert-list" id="alert-list">
+          <div class="loading"><div class="spinner"></div> Carregando...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">ODS Conectado</span>
+        </div>
+        <div class="ods-card">
+          <div class="ods-number">13</div>
+          <div class="ods-label">Ação Climática</div>
+          <div class="ods-desc">Esta plataforma contribui diretamente para o monitoramento e resposta a eventos climáticos extremos, utilizando dados orbitais para apoiar políticas de proteção ambiental no Brasil.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span>OrbitalWatch · FIAP Global Solution 2026 · Engenharia de Software 4º Ano</span>
+  <span>Dados: <span style="color:var(--accent)">NASA FIRMS</span> · Infraestrutura: <span style="color:var(--accent)">Microsoft Azure</span></span>
+</footer>
+
+<script>
+  let map = L.map('map', { zoomControl: true }).setView([-14.235, -51.925], 4);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© CartoDB',
+    maxZoom: 18
+  }).addTo(map);
+
+  function confidenceColor(c) {
+    if (c === 'high') return '#ff4d00';
+    if (c === 'nominal') return '#ffb800';
+    return '#39ff14';
+  }
+
+  async function loadStats() {
+    try {
+      const r = await fetch('/api/stats');
+      const d = await r.json();
+      document.getElementById('stat-sats').textContent = d.satellites_monitored.toLocaleString('pt-BR');
+      document.getElementById('stat-area').textContent = (d.area_monitored_km2 / 1000000).toFixed(1) + 'M';
+      document.getElementById('stat-readings').textContent = d.data_points_today.toLocaleString('pt-BR');
+    } catch(e) {}
+  }
+
+  async function loadFires() {
+    document.getElementById('alert-list').innerHTML = '<div class="loading"><div class="spinner"></div> Consultando NASA FIRMS...</div>';
+    
+    try {
+      const r = await fetch('/api/fires');
+      const d = await r.json();
+
+      document.getElementById('stat-fires').textContent = d.total;
+      document.getElementById('last-update').textContent = new Date(d.updated_at).toLocaleTimeString('pt-BR');
+      document.getElementById('alert-count').textContent = d.total + ' alertas';
+
+      // Clear existing markers
+      map.eachLayer(l => { if (l instanceof L.CircleMarker) map.removeLayer(l); });
+
+      const alertHTML = d.fires.slice(0, 8).map(f => `
+        <div class="alert-item">
+          <div class="alert-dot ${f.confidence}"></div>
+          <div class="alert-info">
+            <div class="alert-title">Foco detectado · ${f.satellite}</div>
+            <div class="alert-meta">${f.lat.toFixed(4)}, ${f.lon.toFixed(4)} · ${f.date} · Temp: ${f.brightness}K</div>
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('alert-list').innerHTML = alertHTML || '<div class="loading">Sem alertas ativos</div>';
+
+      d.fires.forEach(f => {
+        L.circleMarker([f.lat, f.lon], {
+          radius: 6,
+          fillColor: confidenceColor(f.confidence),
+          color: confidenceColor(f.confidence),
+          weight: 1,
+          opacity: 0.9,
+          fillOpacity: 0.7
+        }).bindPopup(`<b>Foco de Calor</b><br/>Satélite: ${f.satellite}<br/>Temperatura: ${f.brightness}K<br/>Confiança: ${f.confidence}<br/>Data: ${f.date}`)
+          .addTo(map);
+      });
+
+    } catch(e) {
+      document.getElementById('alert-list').innerHTML = '<div class="loading">Erro ao carregar dados</div>';
+    }
+  }
+
+  loadStats();
+  loadFires();
+  setInterval(loadFires, 300000); // atualiza a cada 5 min
+</script>
+</body>
+</html>
